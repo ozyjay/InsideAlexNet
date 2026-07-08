@@ -27,6 +27,10 @@ def test_index_html_uses_selectable_diagram_for_model_layers() -> None:
         assert layer in html
 
     assert "Model layer explorer" in html
+    assert "feature-volume path" in html
+    assert "stageVisualSpec" in html
+    assert "volume-front" in html
+    assert "size-guide" in html
     assert "Input image preview" not in html
     assert "Layer timeline" not in html
     assert "Top-5 predictions" not in html

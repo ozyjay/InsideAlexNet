@@ -428,7 +428,9 @@ def _render_index_html() -> str:
     .stack {{ display: grid; gap: 16px; }}
     label {{ display: block; margin-bottom: 8px; font-weight: 700; }}
     select, button {{ width: 100%; border-radius: 14px; border: 1px solid var(--border); padding: 12px 14px; font: inherit; }}
-    select {{ background: linear-gradient(180deg, var(--panel-2), var(--panel-3)); color: var(--text); }}
+    select {{ background-color: var(--panel-3); background-image: linear-gradient(180deg, var(--panel-2), var(--panel-3)); color: var(--text); color-scheme: dark; }}
+    select option {{ background-color: var(--panel-3); color: var(--text); }}
+    select option:checked {{ background-color: var(--panel-2); color: var(--text); }}
     button {{ background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--button-text); font-weight: 900; cursor: pointer; box-shadow: 0 12px 30px rgba(var(--accent-rgb), 0.22); transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease; }}
     button:hover:not(:disabled) {{ transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 16px 38px rgba(var(--accent-2-rgb), 0.26); }}
     button.secondary {{ background: linear-gradient(180deg, var(--panel-2), var(--panel-3)); color: var(--text); box-shadow: none; }}
@@ -445,12 +447,20 @@ def _render_index_html() -> str:
     .bar span {{ display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3)); box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.55); }}
     .muted {{ color: var(--muted); }}
     .network {{ margin-bottom: 16px; padding: 16px; border-radius: 18px; background: radial-gradient(circle at 20% 45%, rgba(var(--accent-rgb), 0.18), transparent 32%), radial-gradient(circle at 78% 50%, rgba(var(--accent-3-rgb), 0.13), transparent 35%), #030611; border: 1px solid var(--border); overflow: hidden; }}
-    .network svg {{ width: 100%; height: auto; display: block; filter: drop-shadow(0 0 16px rgba(var(--accent-rgb), 0.12)); }}
-    .network .layer {{ fill: rgba(var(--accent-rgb), 0.13); stroke: rgba(226, 232, 240, 0.78); stroke-width: 2; }}
-    .network .layer.active, .network .layer:focus {{ fill: rgba(var(--accent-3-rgb), 0.38); stroke: var(--heading-4); outline: none; }}
+    .network svg {{ width: 100%; height: auto; display: block; filter: drop-shadow(0 0 16px rgba(var(--accent-rgb), 0.12)); overflow: visible; }}
+    .network .layer {{ outline: none; }}
+    .network .stage-hit {{ fill: transparent; stroke: none; }}
+    .network .volume-front {{ fill: rgba(var(--accent-rgb), 0.16); stroke: rgba(226, 232, 240, 0.82); stroke-width: 2; }}
+    .network .volume-top {{ fill: rgba(var(--accent-2-rgb), 0.22); stroke: rgba(226, 232, 240, 0.62); stroke-width: 1.5; }}
+    .network .volume-side {{ fill: rgba(var(--accent-3-rgb), 0.18); stroke: rgba(226, 232, 240, 0.58); stroke-width: 1.5; }}
+    .network .volume-vector {{ fill: rgba(var(--accent-rgb), 0.13); stroke: rgba(226, 232, 240, 0.78); stroke-width: 2; }}
+    .network .layer.active .volume-front, .network .layer:focus .volume-front, .network .layer.active .volume-vector, .network .layer:focus .volume-vector {{ fill: rgba(var(--accent-3-rgb), 0.38); stroke: var(--heading-4); }}
+    .network .layer.active .volume-top, .network .layer:focus .volume-top {{ fill: rgba(var(--accent-2-rgb), 0.34); stroke: var(--heading-4); }}
+    .network .layer.active .volume-side, .network .layer:focus .volume-side {{ fill: rgba(var(--accent-3-rgb), 0.28); stroke: var(--heading-4); }}
     .network .connector {{ stroke: rgba(148, 163, 184, 0.5); stroke-width: 3; stroke-linecap: round; }}
-    .network text {{ fill: #f8fbff; font-size: 13px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }}
-    .network .stage-note {{ fill: #b9c4d8; font-size: 11px; font-weight: 700; }}
+    .network .size-guide {{ stroke: rgba(226, 232, 240, 0.26); stroke-width: 1; stroke-dasharray: 4 6; }}
+    .network text {{ fill: #f8fbff; font-size: 12px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }}
+    .network .stage-note {{ fill: #d6deed; font-size: 10px; font-weight: 800; }}
     .layer-detail {{ margin: 0 0 16px; display: grid; grid-template-columns: minmax(260px, 1.4fr) minmax(220px, 0.8fr); gap: 16px; align-items: start; background: linear-gradient(180deg, rgba(8,16,36,0.98), rgba(4,7,16,0.98)); border: 1px solid rgba(var(--accent-rgb), 0.2); border-radius: 18px; padding: 16px; }}
     .layer-detail.placeholder {{ display: block; }}
     .layer-detail img, .layer-detail video {{ width: 100%; display: block; border-radius: 14px; background: #020208; border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 24px 60px rgba(0,0,0,0.32); }}
@@ -668,35 +678,98 @@ function splitStageLabel(label) {{
   return [parts[0], parts.slice(1).join(' ')];
 }}
 
+function stageVisualSpec(stage, index) {{
+  const label = stage.label;
+  const lowerLabel = label.toLowerCase();
+  if (label === 'Input') {{
+    return {{kind: 'volume', width: 58, height: 122, depth: 10}};
+  }}
+  if (label === 'Classifier') {{
+    return {{kind: 'vector', width: 88, height: 66, depth: 0}};
+  }}
+  if (label === 'Prediction') {{
+    return {{kind: 'vector', width: 86, height: 54, depth: 0}};
+  }}
+  if (lowerLabel.includes('avg')) {{
+    return {{kind: 'volume', width: 60, height: 42, depth: 18}};
+  }}
+
+  const layerCount = selectedModel().layers.length;
+  const layerIndex = Math.max(0, index - 1);
+  const progress = layerCount <= 1 ? 0 : layerIndex / (layerCount - 1);
+  let spatialHeight = 96 - progress * 46;
+  let frontWidth = 48 + progress * 26;
+  let depth = 10 + progress * 26;
+
+  if (lowerLabel.includes('pool')) {{
+    spatialHeight -= 14;
+    frontWidth -= 4;
+    depth += 3;
+  }}
+  if (lowerLabel.includes('residual') || lowerLabel.includes('deep')) {{
+    depth += 5;
+  }}
+  if (lowerLabel.includes('final')) {{
+    spatialHeight -= 6;
+    depth += 8;
+  }}
+
+  return {{
+    kind: 'volume',
+    width: Math.round(Math.max(44, frontWidth)),
+    height: Math.round(Math.max(38, spatialHeight)),
+    depth: Math.round(Math.max(8, depth))
+  }};
+}}
+
+function renderStageShape(stage, index, centre, baseline) {{
+  const spec = stageVisualSpec(stage, index);
+  const x = centre - spec.width / 2;
+  const y = baseline - spec.height / 2;
+  const [top, bottom] = splitStageLabel(stage.label);
+  const textY = baseline + (spec.height < 48 ? 0 : 2);
+
+  if (spec.kind === 'vector') {{
+    return `
+      <g class="layer" data-layer="${{escapeHtml(stage.label)}}" tabindex="0" role="button" aria-label="${{escapeHtml(stage.label)}} stage">
+        <rect class="volume-vector" x="${{x}}" y="${{y}}" width="${{spec.width}}" height="${{spec.height}}" rx="12" />
+        <text x="${{centre}}" y="${{textY - (bottom ? 8 : 0)}}">${{escapeHtml(top)}}</text>
+        ${{bottom ? `<text x="${{centre}}" y="${{textY + 9}}" class="stage-note">${{escapeHtml(bottom)}}</text>` : ''}}
+        <rect class="stage-hit" x="${{centre - 64}}" y="34" width="128" height="176" rx="16" />
+      </g>`;
+  }}
+
+  const dx = spec.depth * 0.58;
+  const dy = -spec.depth * 0.42;
+  const sidePoints = `${{x + spec.width}},${{y}} ${{x + spec.width + dx}},${{y + dy}} ${{x + spec.width + dx}},${{y + spec.height + dy}} ${{x + spec.width}},${{y + spec.height}}`;
+  const topPoints = `${{x}},${{y}} ${{x + dx}},${{y + dy}} ${{x + spec.width + dx}},${{y + dy}} ${{x + spec.width}},${{y}}`;
+
+  return `
+    <g class="layer layer-volume" data-layer="${{escapeHtml(stage.label)}}" tabindex="0" role="button" aria-label="${{escapeHtml(stage.label)}} stage">
+      <polygon class="volume-side" points="${{sidePoints}}" />
+      <polygon class="volume-top" points="${{topPoints}}" />
+      <rect class="volume-front" x="${{x}}" y="${{y}}" width="${{spec.width}}" height="${{spec.height}}" rx="10" />
+      <text x="${{centre}}" y="${{textY - (bottom ? 8 : 0)}}">${{escapeHtml(top)}}</text>
+      ${{bottom ? `<text x="${{centre}}" y="${{textY + 9}}" class="stage-note">${{escapeHtml(bottom)}}</text>` : ''}}
+      <rect class="stage-hit" x="${{centre - 64}}" y="34" width="128" height="176" rx="16" />
+    </g>`;
+}}
+
 function renderNetworkDiagram() {{
   const stages = diagramStages();
-  const width = 1100;
-  const height = 220;
-  const margin = 34;
+  const width = 1180;
+  const height = 250;
+  const baseline = 126;
+  const margin = 82;
   const step = (width - margin * 2) / Math.max(1, stages.length - 1);
-  const rectWidth = Math.min(96, Math.max(56, step * 0.72));
-  const rects = stages.map((stage, index) => {{
-    const centre = margin + step * index;
-    const isInput = stage.label === 'Input';
-    const isPrediction = stage.label === 'Prediction';
-    const rectHeight = isInput ? 124 : isPrediction ? 84 : 92;
-    const y = 110 - rectHeight / 2;
-    return `<rect class="layer" data-layer="${{escapeHtml(stage.label)}}" tabindex="0" x="${{centre - rectWidth / 2}}" y="${{y}}" width="${{rectWidth}}" height="${{rectHeight}}" rx="14" />`;
-  }}).join('');
-  const texts = stages.map((stage, index) => {{
-    const centre = margin + step * index;
-    const [top, bottom] = splitStageLabel(stage.label);
-    if (!bottom) {{
-      return `<text x="${{centre}}" y="110">${{escapeHtml(top)}}</text>`;
-    }}
-    return `<text x="${{centre}}" y="104">${{escapeHtml(top)}}</text><text x="${{centre}}" y="122" class="stage-note">${{escapeHtml(bottom)}}</text>`;
-  }}).join('');
+  const shapes = stages.map((stage, index) => renderStageShape(stage, index, margin + step * index, baseline)).join('');
   networkDiagram.innerHTML = `
     <svg viewBox="0 0 ${{width}} ${{height}}" role="img">
-      <title>Selectable ${{escapeHtml(selectedModelName())}} path from input through demo layers</title>
-      <line class="connector" x1="${{margin}}" y1="110" x2="${{width - margin}}" y2="110" />
-      ${{rects}}
-      ${{texts}}
+      <title>Selectable ${{escapeHtml(selectedModelName())}} feature-volume path from input through demo layers</title>
+      <line class="connector" x1="${{margin}}" y1="${{baseline}}" x2="${{width - margin}}" y2="${{baseline}}" />
+      <line class="size-guide" x1="${{margin}}" y1="64" x2="${{width - margin}}" y2="64" />
+      <line class="size-guide" x1="${{margin}}" y1="188" x2="${{width - margin}}" y2="188" />
+      ${{shapes}}
     </svg>`;
   attachLayerEvents();
 }}
