@@ -2,13 +2,14 @@
 
 A local-first Open Day demo that uses AlexNet to explain how a trained vision model responds at different layers.
 
-The app now uses FastAPI with a simple dependency-free browser UI. The current MVP supports curated image discovery, image preview, reset behaviour, top-5 AlexNet predictions when pretrained weights are available locally, selected activation-grid visualisations, and graceful messaging when live weights are unavailable. Full fallback replay will be added in a later phase.
+The app now uses FastAPI with a simple dependency-free browser UI. The current MVP supports curated image discovery, optional local camera capture, image preview, reset behaviour, top-5 AlexNet predictions when pretrained weights are available locally, selected activation-grid visualisations, and graceful messaging when live weights are unavailable. Full fallback replay will be added in a later phase.
 
 ## What the demo shows
 
-The demo is designed for a public university booth. A staff member or visitor selects a curated local image and, once the later phases are complete, can view:
+The demo is designed for a public university booth. A staff member or visitor selects a curated local image or explicitly starts the local camera mode, then can view:
 
 - the selected input image;
+- a single opt-in camera frame, if camera mode is used;
 - top-5 AlexNet predictions;
 - selected layer responses;
 - simple feature-map grid visualisations;
@@ -20,7 +21,7 @@ Use this wording when explaining the app:
 
 ## What it does not show
 
-This demo does **not** show private reasoning, human-like sight, guaranteed truth, or a model that is always correct. It does not use visitor uploads, webcam input, or visitor data storage.
+This demo does **not** show private reasoning, human-like sight, guaranteed truth, or a model that is always correct. It does not use visitor uploads or visitor data storage. Camera mode is opt-in, local-only, and analyses a captured still frame without saving it.
 
 Avoid phrases such as:
 
@@ -88,7 +89,17 @@ Supported extensions are:
 - `.png`
 - `.webp`
 
-The MVP intentionally does not include visitor photo upload or webcam input. If the image folder is empty, the app shows a clear message explaining where to place images.
+The MVP intentionally does not include visitor photo upload. Optional camera mode is local-only and does not save captured frames. If the image folder is empty, the app shows a clear message explaining where to place images.
+
+## Live camera mode
+
+Camera mode was added as an explicit opt-in booth feature.
+
+- The browser asks for camera permission.
+- The preview stays in the local browser.
+- Press **Capture + run** to send one still frame to the local FastAPI app.
+- The frame is analysed in memory and is not written to disk.
+- Do not use camera mode for visitors who do not consent.
 
 ## Precompute fallback assets
 
@@ -136,7 +147,7 @@ Do not use random fallback ports for Open Day mode.
 
 ## Reset and fallback behaviour
 
-The reset button clears the current image selection and any placeholder result state, then returns the app to the default instruction screen.
+The reset button clears the current image selection, stops any active camera preview, clears results, and returns the app to the default instruction screen.
 
 Fallback/replay mode is shown in the UI now, but full fallback asset playback is part of a later build phase. Live AlexNet prediction failures are displayed as public setup messages rather than app crashes.
 
@@ -183,7 +194,8 @@ The app fails gracefully if pretrained AlexNet weights are unavailable locally. 
 - [ ] Curated booth-safe images added to `assets/demo_images/`.
 - [ ] App starts on `127.0.0.1:3450`.
 - [ ] Reset button returns to the default instruction screen.
-- [ ] No visitor upload, webcam, or visitor data storage is present.
+- [ ] No visitor upload or visitor data storage is present.
+- [ ] Camera mode is used only with explicit visitor consent.
 - [ ] Staff can explain the demo in under 45 seconds.
 - [ ] Fallback replay assets are precomputed once Phase 5 is complete.
 - [ ] Tests pass before the booth session.

@@ -10,7 +10,8 @@ Guidance for future development of **How Does a Neural Network See?**
 - Avoid unnecessary dependencies.
 - Keep the app local-first.
 - Use FastAPI for the local app unless there is an explicit decision to change stacks.
-- Do not add webcam, upload, or data storage without an explicit decision.
+- Do not add upload or data storage without an explicit decision.
+- Camera mode exists by explicit decision. Keep it opt-in, local-only, and do not save captured frames.
 - Do not overclaim AI capabilities.
 - Add or update tests with changes.
 - Preserve reset behaviour.

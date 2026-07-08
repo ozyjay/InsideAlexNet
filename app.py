@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,13 @@ class RunRequest(BaseModel):
     fallback: bool = False
 
 
+class CameraRunRequest(BaseModel):
+    """Request body for running AlexNet on a locally captured camera frame."""
+
+    image_data: str = Field(..., min_length=1)
+    fallback: bool = False
+
+
 def _image_lookup() -> dict[str, Path]:
     """Return curated images keyed by filename."""
     return {path.name: path for path in discover_images(DEMO_IMAGES_DIR)}
@@ -41,6 +51,58 @@ def _find_demo_image(image_name: str) -> Path:
     if image_path is None:
         raise HTTPException(status_code=404, detail="Curated image not found.")
     return image_path
+
+
+def _decode_camera_image(image_data: str) -> Image.Image:
+    """Decode a browser camera data URL without saving it to disk."""
+    if "," in image_data:
+        header, encoded = image_data.split(",", 1)
+        if not header.startswith("data:image/"):
+            raise ValueError("Camera frame must be an image data URL.")
+    else:
+        encoded = image_data
+
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Camera frame was not valid base64 image data.") from exc
+
+    if len(raw) > 8 * 1024 * 1024:
+        raise ValueError("Camera frame is too large for this local demo.")
+
+    try:
+        return Image.open(BytesIO(raw)).convert("RGB")
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError("Camera frame could not be opened as an image.") from exc
+
+
+def _run_live_analysis_response(image: Image.Image, *, source: str) -> JSONResponse:
+    """Run AlexNet analysis and return a consistent JSON response."""
+    try:
+        analysis = run_alexnet_analysis(image)
+    except ModelUnavailableError as exc:
+        return JSONResponse(
+            {
+                "ok": False,
+                "mode": "live",
+                "source": source,
+                "message": str(exc),
+                "help": "Run the setup script and pre-download AlexNet weights, or use fallback replay once assets have been precomputed.",
+                "predictions": [],
+                "visualisations": [],
+            }
+        )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "mode": "live",
+            "source": source,
+            "message": "AlexNet returned likely ImageNet labels. These can be wrong.",
+            "predictions": [prediction.to_dict() for prediction in analysis.predictions],
+            "visualisations": [visualisation.to_dict() for visualisation in analysis.visualisations],
+        }
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -97,6 +159,7 @@ def run_demo(request: RunRequest) -> JSONResponse:
             {
                 "ok": False,
                 "mode": "fallback",
+                "source": "curated",
                 "message": "Fallback replay assets will be wired in Phase 5. Turn replay mode off for live AlexNet inference.",
                 "predictions": [],
                 "visualisations": [],
@@ -110,6 +173,7 @@ def run_demo(request: RunRequest) -> JSONResponse:
             {
                 "ok": False,
                 "mode": "live",
+                "source": "curated",
                 "message": f"Could not open the curated image: {exc}",
                 "predictions": [],
                 "visualisations": [],
@@ -117,29 +181,40 @@ def run_demo(request: RunRequest) -> JSONResponse:
             status_code=400,
         )
 
-    try:
-        analysis = run_alexnet_analysis(image)
-    except ModelUnavailableError as exc:
+    return _run_live_analysis_response(image, source="curated")
+
+
+@app.post("/api/run-camera")
+def run_camera_demo(request: CameraRunRequest) -> JSONResponse:
+    """Run AlexNet on a browser-captured camera frame without saving it."""
+    if request.fallback:
         return JSONResponse(
             {
                 "ok": False,
-                "mode": "live",
-                "message": str(exc),
-                "help": "Run the setup script and pre-download AlexNet weights, or use fallback replay once assets have been precomputed.",
+                "mode": "fallback",
+                "source": "camera",
+                "message": "Fallback replay uses curated precomputed assets, not live camera frames. Turn replay mode off for camera inference.",
                 "predictions": [],
                 "visualisations": [],
             }
         )
 
-    return JSONResponse(
-        {
-            "ok": True,
-            "mode": "live",
-            "message": "AlexNet returned likely ImageNet labels. These can be wrong.",
-            "predictions": [prediction.to_dict() for prediction in analysis.predictions],
-            "visualisations": [visualisation.to_dict() for visualisation in analysis.visualisations],
-        }
-    )
+    try:
+        image = _decode_camera_image(request.image_data)
+    except ValueError as exc:
+        return JSONResponse(
+            {
+                "ok": False,
+                "mode": "live",
+                "source": "camera",
+                "message": str(exc),
+                "predictions": [],
+                "visualisations": [],
+            },
+            status_code=400,
+        )
+
+    return _run_live_analysis_response(image, source="camera")
 
 
 def _render_index_html() -> str:
@@ -191,7 +266,10 @@ def _render_index_html() -> str:
     .toggle {{ display: flex; gap: 10px; align-items: center; color: var(--muted); }}
     .toggle input {{ width: auto; transform: scale(1.2); accent-color: var(--accent); }}
     .preview {{ min-height: 340px; display: grid; place-items: center; background: radial-gradient(circle at 50% 25%, rgba(34,211,238,0.13), transparent 34%), #050814; border-radius: 18px; overflow: hidden; border: 1px solid var(--border); }}
-    .preview img {{ max-width: 100%; max-height: 520px; display: block; }}
+    .preview img, .preview video {{ max-width: 100%; max-height: 520px; display: block; }}
+    .preview video {{ width: 100%; transform: scaleX(-1); }}
+    .camera-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
+    .camera-note {{ font-size: 0.88rem; margin: 8px 0 0; color: var(--muted); }}
     .message {{ padding: 12px 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(30,41,59,0.98), rgba(17,24,39,0.98)); color: var(--muted); border: 1px solid rgba(148,163,184,0.16); }}
     .message.error {{ background: linear-gradient(180deg, rgba(127,29,29,0.46), rgba(69,10,10,0.34)); color: var(--danger); border-color: rgba(248,113,113,0.3); }}
     .message.ok {{ background: linear-gradient(180deg, rgba(20,83,45,0.45), rgba(6,78,59,0.34)); color: var(--ok); border-color: rgba(74,222,128,0.28); }}
@@ -238,6 +316,15 @@ def _render_index_html() -> str:
         <h2>Curated image</h2>
         <label for="imageSelect">Select a booth image</label>
         <select id="imageSelect"><option value="">Loading images…</option></select>
+      </div>
+
+      <div>
+        <h2>Live camera</h2>
+        <div class="camera-actions">
+          <button id="startCameraButton" class="secondary" type="button">Start camera</button>
+          <button id="cameraRunButton" type="button" disabled>Capture + run</button>
+        </div>
+        <p class="camera-note">Opt-in local camera mode. Frames are sent only to this local app for analysis and are not saved.</p>
       </div>
 
       <label class="toggle"><input id="fallbackToggle" type="checkbox" /> Fallback / replay mode</label>
@@ -296,6 +383,8 @@ def _render_index_html() -> str:
 const imageSelect = document.getElementById('imageSelect');
 const preview = document.getElementById('preview');
 const runButton = document.getElementById('runButton');
+const startCameraButton = document.getElementById('startCameraButton');
+const cameraRunButton = document.getElementById('cameraRunButton');
 const resetButton = document.getElementById('resetButton');
 const fallbackToggle = document.getElementById('fallbackToggle');
 const statusBox = document.getElementById('status');
@@ -306,6 +395,8 @@ const timeline = document.getElementById('timeline');
 const caption = document.getElementById('caption');
 let captions = {{}};
 let visualisationsByLabel = new Map();
+let cameraStream = null;
+let cameraVideo = null;
 
 function setStatus(text, kind = '') {{
   statusBox.className = `message ${{kind}}`;
@@ -322,6 +413,7 @@ function clearResults() {{
 }}
 
 function resetDemo() {{
+  stopCamera();
   imageSelect.value = '';
   fallbackToggle.checked = false;
   runButton.disabled = true;
@@ -362,6 +454,120 @@ function selectLayerFromDiagram(stage) {{
   }}
 }}
 
+function renderAnalysisResult(data) {{
+  setStatus(data.message || 'Run complete.', data.ok ? 'ok' : 'error');
+  if (data.help) {{
+    setStatus(`${{data.message}} ${{data.help}}`, data.ok ? 'ok' : 'error');
+  }}
+  predictions.innerHTML = '';
+  visualisationsByLabel = new Map();
+  data.predictions.forEach(item => {{
+    const li = document.createElement('li');
+    const pct = Math.round(item.probability * 1000) / 10;
+    li.innerHTML = `<strong>${{item.label}}</strong><span>${{pct}}%</span><div class="bar"><span style="width: ${{pct}}%"></span></div>`;
+    predictions.appendChild(li);
+  }});
+  featureMaps.innerHTML = '';
+  if (data.visualisations && data.visualisations.length) {{
+    data.visualisations.forEach(item => {{
+      visualisationsByLabel.set(item.label, item);
+      const card = document.createElement('article');
+      card.className = 'feature-card';
+      card.dataset.layer = item.label;
+      const captionText = captions[item.caption_key] || item.note || '';
+      card.innerHTML = `<h3>${{item.label}}</h3><img src="${{item.image_data}}" alt="${{item.label}} activation grid" /><small>${{captionText}}</small><small>Tensor shape: ${{item.tensor_shape.join(' × ')}}</small><small>Click to enlarge this layer.</small>`;
+      card.addEventListener('click', () => showLayerDetail(item));
+      featureMaps.appendChild(card);
+    }});
+  }} else if (data.ok) {{
+    layerDetail.className = 'layer-detail placeholder';
+    layerDetail.innerHTML = '<p class="message">Click a feature-map card after running AlexNet to enlarge that layer and read a more detailed explanation.</p>';
+    featureMaps.innerHTML = '<p class="message">The model ran, but no selected activation grids were captured.</p>';
+  }} else {{
+    layerDetail.className = 'layer-detail placeholder';
+    layerDetail.innerHTML = '<p class="message">Detailed layer views will appear when live inference or fallback replay is available.</p>';
+    featureMaps.innerHTML = '<p class="message">Activation grids will appear here when live inference or fallback replay is available.</p>';
+  }}
+}}
+
+function stopCamera() {{
+  if (cameraStream) {{
+    cameraStream.getTracks().forEach(track => track.stop());
+  }}
+  cameraStream = null;
+  cameraVideo = null;
+  cameraRunButton.disabled = true;
+  startCameraButton.textContent = 'Start camera';
+}}
+
+async function startCamera() {{
+  if (cameraStream) {{
+    stopCamera();
+    preview.innerHTML = '<p class="muted">Choose a curated image or start the camera preview.</p>';
+    return;
+  }}
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
+    setStatus('This browser does not support local camera access.', 'error');
+    return;
+  }}
+  clearResults();
+  imageSelect.value = '';
+  runButton.disabled = true;
+  try {{
+    cameraStream = await navigator.mediaDevices.getUserMedia({{video: {{width: {{ideal: 960}}, height: {{ideal: 720}}, facingMode: 'user'}}, audio: false}});
+    cameraVideo = document.createElement('video');
+    cameraVideo.autoplay = true;
+    cameraVideo.playsInline = true;
+    cameraVideo.muted = true;
+    cameraVideo.srcObject = cameraStream;
+    preview.innerHTML = '';
+    preview.appendChild(cameraVideo);
+    cameraRunButton.disabled = false;
+    startCameraButton.textContent = 'Stop camera';
+    setStatus('Camera preview is local. Capture a still frame to run AlexNet.', 'ok');
+  }} catch (error) {{
+    setStatus(`Camera access was not available: ${{error}}`, 'error');
+    stopCamera();
+  }}
+}}
+
+function captureCameraFrame() {{
+  if (!cameraVideo || !cameraVideo.videoWidth || !cameraVideo.videoHeight) {{
+    throw new Error('Camera preview is not ready yet.');
+  }}
+  const canvas = document.createElement('canvas');
+  const maxSide = 900;
+  const scale = Math.min(1, maxSide / Math.max(cameraVideo.videoWidth, cameraVideo.videoHeight));
+  canvas.width = Math.round(cameraVideo.videoWidth * scale);
+  canvas.height = Math.round(cameraVideo.videoHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}}
+
+async function runCameraFrame() {{
+  cameraRunButton.disabled = true;
+  predictions.innerHTML = '';
+  featureMaps.innerHTML = '<p class="message">Capturing selected AlexNet layer responses from the camera frame…</p>';
+  setStatus('Capturing one local camera frame…');
+  try {{
+    const imageData = captureCameraFrame();
+    const response = await fetch('/api/run-camera', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{image_data: imageData, fallback: fallbackToggle.checked}})
+    }});
+    const data = await response.json();
+    renderAnalysisResult(data);
+  }} catch (error) {{
+    setStatus(`The local app could not analyse the camera frame: ${{error}}`, 'error');
+  }} finally {{
+    cameraRunButton.disabled = !cameraStream;
+  }}
+}}
+
 async function loadCaptions() {{
   captions = await fetch('/api/captions').then(response => response.json());
   timeline.innerHTML = '';
@@ -398,6 +604,7 @@ async function loadImages() {{
 }}
 
 imageSelect.addEventListener('change', () => {{
+  stopCamera();
   clearResults();
   const selected = imageSelect.selectedOptions[0];
   runButton.disabled = !imageSelect.value;
@@ -421,39 +628,7 @@ runButton.addEventListener('click', async () => {{
       body: JSON.stringify({{image_name: imageSelect.value, fallback: fallbackToggle.checked}})
     }});
     const data = await response.json();
-    setStatus(data.message || 'Run complete.', data.ok ? 'ok' : 'error');
-    if (data.help) {{
-      setStatus(`${{data.message}} ${{data.help}}`, data.ok ? 'ok' : 'error');
-    }}
-    predictions.innerHTML = '';
-    visualisationsByLabel = new Map();
-    data.predictions.forEach(item => {{
-      const li = document.createElement('li');
-      const pct = Math.round(item.probability * 1000) / 10;
-      li.innerHTML = `<strong>${{item.label}}</strong><span>${{pct}}%</span><div class="bar"><span style="width: ${{pct}}%"></span></div>`;
-      predictions.appendChild(li);
-    }});
-    featureMaps.innerHTML = '';
-    if (data.visualisations && data.visualisations.length) {{
-      data.visualisations.forEach(item => {{
-        visualisationsByLabel.set(item.label, item);
-        const card = document.createElement('article');
-        card.className = 'feature-card';
-        card.dataset.layer = item.label;
-        const captionText = captions[item.caption_key] || item.note || '';
-        card.innerHTML = `<h3>${{item.label}}</h3><img src="${{item.image_data}}" alt="${{item.label}} activation grid" /><small>${{captionText}}</small><small>Tensor shape: ${{item.tensor_shape.join(' × ')}}</small><small>Click to enlarge this layer.</small>`;
-        card.addEventListener('click', () => showLayerDetail(item));
-        featureMaps.appendChild(card);
-      }});
-    }} else if (data.ok) {{
-      layerDetail.className = 'layer-detail placeholder';
-      layerDetail.innerHTML = '<p class="message">Click a feature-map card after running AlexNet to enlarge that layer and read a more detailed explanation.</p>';
-      featureMaps.innerHTML = '<p class="message">The model ran, but no selected activation grids were captured.</p>';
-    }} else {{
-      layerDetail.className = 'layer-detail placeholder';
-      layerDetail.innerHTML = '<p class="message">Detailed layer views will appear when live inference or fallback replay is available.</p>';
-      featureMaps.innerHTML = '<p class="message">Activation grids will appear here when live inference or fallback replay is available.</p>';
-    }}
+    renderAnalysisResult(data);
   }} catch (error) {{
     setStatus(`The local app could not complete the run: ${{error}}`, 'error');
   }} finally {{
@@ -461,6 +636,8 @@ runButton.addEventListener('click', async () => {{
   }}
 }});
 
+startCameraButton.addEventListener('click', startCamera);
+cameraRunButton.addEventListener('click', runCameraFrame);
 resetButton.addEventListener('click', resetDemo);
 document.querySelectorAll('.network .layer').forEach(layer => {{
   layer.style.cursor = 'pointer';
