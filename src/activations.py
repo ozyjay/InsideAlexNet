@@ -1,4 +1,4 @@
-"""Activation capture helpers for selected AlexNet layers."""
+"""Activation capture helpers for the selectable AlexNet layers."""
 
 from __future__ import annotations
 
@@ -21,25 +21,67 @@ class LayerSpec:
 
 SELECTED_LAYER_SPECS: tuple[LayerSpec, ...] = (
     LayerSpec(
-        key="early",
-        label="Early layer",
+        key="conv1",
+        label="Conv 1",
         module_path="features.1",
-        caption_key="Early layer",
+        caption_key="Conv 1",
         public_note="First convolution response after ReLU, shown as fixed feature-map channels so grid positions stay stable.",
     ),
     LayerSpec(
-        key="middle",
-        label="Middle layer",
-        module_path="features.4",
-        caption_key="Middle layer",
-        public_note="Middle convolution response after ReLU, where simple patterns are combined.",
+        key="pool1",
+        label="Pool 1",
+        module_path="features.2",
+        caption_key="Pool 1",
+        public_note="First max-pooling output, where nearby strong responses are kept and the map becomes smaller.",
     ),
     LayerSpec(
-        key="deep",
-        label="Deep layer",
+        key="conv2",
+        label="Conv 2",
+        module_path="features.4",
+        caption_key="Conv 2",
+        public_note="Second convolution response after ReLU, where simple patterns are combined into richer local features.",
+    ),
+    LayerSpec(
+        key="pool2",
+        label="Pool 2",
+        module_path="features.5",
+        caption_key="Pool 2",
+        public_note="Second max-pooling output, preserving strong responses in a smaller spatial grid.",
+    ),
+    LayerSpec(
+        key="conv3",
+        label="Conv 3",
+        module_path="features.7",
+        caption_key="Conv 3",
+        public_note="Third convolution response after ReLU, combining earlier patterns into more complex textures and parts.",
+    ),
+    LayerSpec(
+        key="conv4",
+        label="Conv 4",
+        module_path="features.9",
+        caption_key="Conv 4",
+        public_note="Fourth convolution response after ReLU, continuing to combine useful visual patterns.",
+    ),
+    LayerSpec(
+        key="conv5",
+        label="Conv 5",
         module_path="features.11",
-        caption_key="Deep layer",
+        caption_key="Conv 5",
         public_note="Final convolution response after ReLU, before the classifier layers.",
+    ),
+    LayerSpec(
+        key="pool5",
+        label="Pool 5",
+        module_path="features.12",
+        caption_key="Pool 5",
+        public_note="Final max-pooling output, a compact spatial summary passed toward the classifier.",
+    ),
+    LayerSpec(
+        key="avgpool",
+        label="Avg pool",
+        module_path="avgpool",
+        caption_key="Avg pool",
+        public_note="Adaptive average-pooling output, shaped into the fixed grid expected by AlexNet’s classifier.",
     ),
 )
 

@@ -2,16 +2,15 @@
 
 A local-first Open Day demo that uses AlexNet to explain how a trained vision model responds at different layers.
 
-The app now uses FastAPI with a simple dependency-free browser UI. The current MVP supports curated image discovery, optional local camera capture, image preview, reset behaviour, top-5 AlexNet predictions when pretrained weights are available locally, selected activation-grid visualisations, and graceful messaging when live weights are unavailable. Full fallback replay will be added in a later phase.
+The app now uses FastAPI with a simple dependency-free browser UI. The current MVP supports curated image discovery, optional local camera capture, a selectable AlexNet layer diagram, reset behaviour, top-5 AlexNet predictions when pretrained weights are available locally, activation-grid visualisations, and graceful messaging when live weights are unavailable. Full fallback replay will be added in a later phase.
 
 ## What the demo shows
 
 The demo is designed for a public university booth. A staff member or visitor selects a curated local image or explicitly starts the local camera mode, then can view:
 
-- the selected input image;
-- a single opt-in camera frame, if camera mode is used;
-- top-5 AlexNet predictions;
-- selected layer responses;
+- the selected input image or opt-in camera frame as the diagram’s **Input** layer;
+- top-5 AlexNet predictions through the selectable **Prediction** layer;
+- selectable layer responses across the AlexNet path;
 - simple feature-map grid visualisations;
 - short public captions for each stage.
 
@@ -96,10 +95,10 @@ The MVP intentionally does not include visitor photo upload. Optional camera mod
 Camera mode was added as an explicit opt-in booth feature.
 
 - The browser asks for camera permission.
-- The preview stays in the local browser.
+- The input preview stays in the local browser and appears as the diagram’s **Input** layer.
 - Press **Capture + run** to send one still frame to the local FastAPI app.
 - Press **Start continuous AlexNet** to repeatedly analyse the latest camera frame while the button is active.
-- Continuous mode runs one local AlexNet request at a time and updates predictions plus the selected detailed feature-map view as fast as the model completes frames. Feature-map tile positions are fixed so the mini images do not swap places between frames.
+- Continuous mode runs one local AlexNet request at a time and updates predictions plus the currently selected layer view as fast as the model completes frames. It captures only the selected activation layer during continuous mode so it can keep grabbing fresh frames instead of rendering every layer on every frame. Feature-map tile positions are fixed so the mini images do not swap places between frames.
 - Frames are analysed in memory and are not written to disk.
 - Do not use camera mode for visitors who do not consent.
 
@@ -167,7 +166,7 @@ The reset button clears the current image selection, stops any active camera pre
 
 Fallback/replay mode is shown in the UI now, but full fallback asset playback is part of a later build phase. Live AlexNet prediction failures are displayed as public setup messages rather than app crashes.
 
-Live mode currently shows fixed-channel feature-map grids for early, middle, and deep AlexNet convolution layers. Each tile position represents the same channel across frames, and each channel is normalised for display. Dark navy/purple means quieter response; cyan, yellow, and white mean stronger response.
+Live mode currently shows fixed-channel feature-map grids for the selectable AlexNet convolution and pooling layers. Each tile position represents the same channel across frames, and each channel is normalised for display. Dark navy/purple means quieter response; cyan, yellow, and white mean stronger response.
 
 ## Public booth script
 

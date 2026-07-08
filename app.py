@@ -39,6 +39,7 @@ class CameraRunRequest(BaseModel):
     image_data: str = Field(..., min_length=1)
     fallback: bool = False
     include_visualisations: bool = True
+    visualisation_keys: list[str] | None = None
 
 
 def _image_lookup() -> dict[str, Path]:
@@ -82,10 +83,15 @@ def _run_live_analysis_response(
     *,
     source: str,
     include_visualisations: bool = True,
+    visualisation_keys: set[str] | None = None,
 ) -> JSONResponse:
     """Run AlexNet analysis and return a consistent JSON response."""
     try:
-        analysis = run_alexnet_analysis(image, include_visualisations=include_visualisations)
+        analysis = run_alexnet_analysis(
+            image,
+            include_visualisations=include_visualisations,
+            visualisation_keys=visualisation_keys,
+        )
     except ModelUnavailableError as exc:
         return JSONResponse(
             {
@@ -148,7 +154,7 @@ def get_image(image_name: str) -> FileResponse:
 
 @app.get("/api/captions")
 def get_captions() -> dict[str, str]:
-    """Return editable public captions for the layer timeline."""
+    """Return editable public captions for the selectable layer diagram."""
     return CAPTIONS
 
 
@@ -226,6 +232,7 @@ def run_camera_demo(request: CameraRunRequest) -> JSONResponse:
         image,
         source="camera",
         include_visualisations=request.include_visualisations,
+        visualisation_keys=set(request.visualisation_keys or ()) or None,
     )
 
 
@@ -277,41 +284,32 @@ def _render_index_html() -> str:
     button:disabled {{ opacity: 0.5; cursor: not-allowed; box-shadow: none; }}
     .toggle {{ display: flex; gap: 10px; align-items: center; color: var(--muted); }}
     .toggle input {{ width: auto; transform: scale(1.2); accent-color: var(--accent); }}
-    .preview {{ min-height: 340px; display: grid; place-items: center; background: radial-gradient(circle at 50% 25%, rgba(34,211,238,0.13), transparent 34%), #050814; border-radius: 18px; overflow: hidden; border: 1px solid var(--border); }}
-    .preview img, .preview video {{ max-width: 100%; max-height: 520px; display: block; }}
-    .preview video {{ width: 100%; transform: scaleX(-1); }}
     .camera-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
     .camera-actions .wide {{ grid-column: 1 / -1; }}
     .camera-note {{ font-size: 0.88rem; margin: 8px 0 0; color: var(--muted); }}
     .message {{ padding: 12px 14px; border-radius: 14px; background: linear-gradient(180deg, rgba(30,41,59,0.98), rgba(17,24,39,0.98)); color: var(--muted); border: 1px solid rgba(148,163,184,0.16); }}
     .message.error {{ background: linear-gradient(180deg, rgba(127,29,29,0.46), rgba(69,10,10,0.34)); color: var(--danger); border-color: rgba(248,113,113,0.3); }}
     .message.ok {{ background: linear-gradient(180deg, rgba(20,83,45,0.45), rgba(6,78,59,0.34)); color: var(--ok); border-color: rgba(74,222,128,0.28); }}
-    .predictions {{ list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }}
-    .predictions li {{ display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; background: linear-gradient(180deg, #10182b, #0a1020); padding: 12px; border-radius: 14px; border: 1px solid rgba(148,163,184,0.12); }}
     .bar {{ grid-column: 1 / -1; height: 9px; background: #1f2941; border-radius: 999px; overflow: hidden; }}
     .bar span {{ display: block; height: 100%; background: linear-gradient(90deg, #22d3ee, #a78bfa, #f59e0b); box-shadow: 0 0 18px rgba(34,211,238,0.55); }}
-    .timeline {{ display: flex; flex-wrap: wrap; gap: 8px; }}
-    .timeline button {{ width: auto; padding: 9px 12px; background: linear-gradient(180deg, #25304a, #182239); color: var(--text); box-shadow: none; }}
-    .timeline button.active {{ background: linear-gradient(135deg, #22d3ee, #f59e0b); color: #06101c; }}
     .muted {{ color: var(--muted); }}
     .network {{ margin-bottom: 16px; padding: 16px; border-radius: 18px; background: radial-gradient(circle at 20% 45%, rgba(34,211,238,0.18), transparent 32%), radial-gradient(circle at 78% 50%, rgba(245,158,11,0.13), transparent 35%), #030611; border: 1px solid var(--border); overflow: hidden; }}
     .network svg {{ width: 100%; height: auto; display: block; filter: drop-shadow(0 0 16px rgba(34,211,238,0.12)); }}
     .network .layer {{ fill: rgba(34, 211, 238, 0.13); stroke: rgba(226, 232, 240, 0.78); stroke-width: 2; }}
-    .network .layer.active {{ fill: rgba(245, 158, 11, 0.38); stroke: #fbbf24; }}
-    .network text {{ fill: #f8fbff; font-size: 15px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; }}
-    .feature-maps {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }}
-    .feature-card {{ background: linear-gradient(180deg, #081024, #060912); border: 1px solid rgba(34,211,238,0.16); border-radius: 18px; padding: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); cursor: pointer; }}
-    .feature-card:hover {{ border-color: rgba(245,158,11,0.42); }}
-    .feature-card h3 {{ margin: 0 0 8px; font-size: 1rem; color: #f8fbff; }}
-    .feature-card.active {{ border-color: rgba(245,158,11,0.72); box-shadow: 0 0 0 1px rgba(245,158,11,0.28), 0 18px 44px rgba(0,0,0,0.28); }}
-    .feature-card img {{ display: block; width: 100%; border-radius: 12px; image-rendering: auto; background: #020208; border: 1px solid rgba(255,255,255,0.08); }}
-    .feature-card small {{ display: block; color: var(--muted); margin-top: 8px; line-height: 1.4; }}
+    .network .layer.active, .network .layer:focus {{ fill: rgba(245, 158, 11, 0.38); stroke: #fbbf24; outline: none; }}
+    .network .connector {{ stroke: rgba(148, 163, 184, 0.5); stroke-width: 3; stroke-linecap: round; }}
+    .network text {{ fill: #f8fbff; font-size: 13px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }}
+    .network .stage-note {{ fill: #b9c4d8; font-size: 11px; font-weight: 700; }}
     .layer-detail {{ margin: 0 0 16px; display: grid; grid-template-columns: minmax(260px, 1.4fr) minmax(220px, 0.8fr); gap: 16px; align-items: start; background: linear-gradient(180deg, rgba(8,16,36,0.98), rgba(4,7,16,0.98)); border: 1px solid rgba(34,211,238,0.2); border-radius: 18px; padding: 16px; }}
     .layer-detail.placeholder {{ display: block; }}
-    .layer-detail img {{ width: 100%; display: block; border-radius: 14px; background: #020208; border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 24px 60px rgba(0,0,0,0.32); }}
+    .layer-detail img, .layer-detail video {{ width: 100%; display: block; border-radius: 14px; background: #020208; border: 1px solid rgba(255,255,255,0.09); box-shadow: 0 24px 60px rgba(0,0,0,0.32); }}
+    .layer-detail video {{ transform: scaleX(-1); }}
+    .camera-capture-source {{ position: fixed; width: 1px; height: 1px; left: -10px; top: -10px; opacity: 0; pointer-events: none; }}
     .detail-copy h3 {{ margin: 0 0 8px; font-size: 1.18rem; color: #fef3c7; }}
     .detail-copy p {{ margin: 0 0 10px; }}
     .detail-pill {{ display: inline-flex; align-items: center; margin: 4px 6px 4px 0; padding: 6px 9px; border-radius: 999px; background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.22); color: #cffafe; font-size: 0.82rem; font-weight: 800; }}
+    .prediction-detail {{ list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }}
+    .prediction-detail li {{ display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; background: rgba(15,23,42,0.74); border: 1px solid rgba(148,163,184,0.14); }}
     @media (max-width: 980px) {{ .layer-detail {{ grid-template-columns: 1fr; }} }}
     @media (max-width: 860px) {{ .grid {{ grid-template-columns: 1fr; }} }}
   </style>
@@ -345,48 +343,48 @@ def _render_index_html() -> str:
 
       <button id="runButton" disabled>Run AlexNet</button>
       <button id="resetButton" class="secondary">Reset demo</button>
-
-      <div>
-        <h2>Layer timeline</h2>
-        <div class="timeline" id="timeline"></div>
-        <p id="caption" class="message">Choose a stage to read the caption.</p>
-      </div>
     </aside>
 
     <section class="stack">
       <div class="card">
-        <h2>Input image preview</h2>
-        <div id="preview" class="preview"><p class="muted">Choose a curated image to preview it here.</p></div>
-      </div>
-
-      <div class="card">
-        <h2>Top-5 predictions</h2>
-        <div id="status" class="message">Predictions will appear here after you run AlexNet.</div>
-        <ol id="predictions" class="predictions"></ol>
-      </div>
-
-      <div class="card">
-        <h2>Feature visualisation</h2>
-        <div class="network" aria-label="Simplified AlexNet layer diagram">
-          <svg viewBox="0 0 760 190" role="img">
-            <title>Simplified AlexNet path from input through selected layers</title>
-            <polygon class="layer" data-layer="Input" points="20,30 105,45 105,155 20,170" />
-            <polygon class="layer" data-layer="Early layer" points="95,50 185,66 185,140 95,156" />
-            <polygon class="layer" data-layer="Middle layer" points="185,72 360,78 360,132 185,138" />
-            <polygon class="layer" data-layer="Deep layer" points="365,78 535,84 535,126 365,132" />
-            <polygon class="layer" data-layer="Prediction" points="545,76 730,88 730,122 545,134" />
-            <text x="62" y="100">Input</text>
-            <text x="140" y="103">Early</text>
-            <text x="272" y="105">Middle</text>
-            <text x="450" y="105">Deep</text>
-            <text x="638" y="105">Prediction</text>
+        <h2>AlexNet layer explorer</h2>
+        <div id="status" class="message">Run AlexNet, then choose any layer. Predictions are shown by selecting the Prediction stage.</div>
+        <p id="caption" class="message">Choose any layer in the diagram, including the input.</p>
+        <div class="network" aria-label="Selectable AlexNet layer diagram">
+          <svg viewBox="0 0 1100 220" role="img">
+            <title>Selectable AlexNet path from input through all demo layers</title>
+            <line class="connector" x1="80" y1="110" x2="1050" y2="110" />
+            <rect class="layer" data-layer="Input" tabindex="0" x="20" y="48" width="90" height="124" rx="16" />
+            <rect class="layer" data-layer="Conv 1" tabindex="0" x="124" y="62" width="76" height="96" rx="14" />
+            <rect class="layer" data-layer="Pool 1" tabindex="0" x="214" y="70" width="72" height="80" rx="14" />
+            <rect class="layer" data-layer="Conv 2" tabindex="0" x="300" y="62" width="76" height="96" rx="14" />
+            <rect class="layer" data-layer="Pool 2" tabindex="0" x="390" y="70" width="72" height="80" rx="14" />
+            <rect class="layer" data-layer="Conv 3" tabindex="0" x="476" y="62" width="76" height="96" rx="14" />
+            <rect class="layer" data-layer="Conv 4" tabindex="0" x="566" y="62" width="76" height="96" rx="14" />
+            <rect class="layer" data-layer="Conv 5" tabindex="0" x="656" y="62" width="76" height="96" rx="14" />
+            <rect class="layer" data-layer="Pool 5" tabindex="0" x="746" y="70" width="72" height="80" rx="14" />
+            <rect class="layer" data-layer="Avg pool" tabindex="0" x="832" y="74" width="78" height="72" rx="14" />
+            <rect class="layer" data-layer="Classifier" tabindex="0" x="924" y="66" width="88" height="88" rx="14" />
+            <rect class="layer" data-layer="Prediction" tabindex="0" x="1026" y="68" width="54" height="84" rx="14" />
+            <text x="65" y="110">Input</text>
+            <text x="162" y="110">Conv 1</text>
+            <text x="250" y="110">Pool 1</text>
+            <text x="338" y="110">Conv 2</text>
+            <text x="426" y="110">Pool 2</text>
+            <text x="514" y="110">Conv 3</text>
+            <text x="604" y="110">Conv 4</text>
+            <text x="694" y="110">Conv 5</text>
+            <text x="782" y="110">Pool 5</text>
+            <text x="871" y="104">Avg</text>
+            <text x="871" y="122" class="stage-note">pool</text>
+            <text x="968" y="104">Classifier</text>
+            <text x="968" y="122" class="stage-note">scores</text>
+            <text x="1053" y="104">Pred</text>
+            <text x="1053" y="122" class="stage-note">iction</text>
           </svg>
         </div>
         <div id="layerDetail" class="layer-detail placeholder">
-          <p class="message">Click a feature-map card after running AlexNet to enlarge that layer and read a more detailed explanation.</p>
-        </div>
-        <div id="featureMaps" class="feature-maps">
-          <p class="message">Run AlexNet to show selected activation grids for early, middle, and deep convolution layers.</p>
+          <p class="message">Choose a curated image or start the camera, then select any AlexNet layer in the diagram.</p>
         </div>
       </div>
     </section>
@@ -395,7 +393,6 @@ def _render_index_html() -> str:
 
 <script>
 const imageSelect = document.getElementById('imageSelect');
-const preview = document.getElementById('preview');
 const runButton = document.getElementById('runButton');
 const startCameraButton = document.getElementById('startCameraButton');
 const cameraRunButton = document.getElementById('cameraRunButton');
@@ -403,18 +400,39 @@ const liveRunButton = document.getElementById('liveRunButton');
 const resetButton = document.getElementById('resetButton');
 const fallbackToggle = document.getElementById('fallbackToggle');
 const statusBox = document.getElementById('status');
-const predictions = document.getElementById('predictions');
-const featureMaps = document.getElementById('featureMaps');
 const layerDetail = document.getElementById('layerDetail');
-const timeline = document.getElementById('timeline');
 const caption = document.getElementById('caption');
+const DIAGRAM_LAYERS = ['Input', 'Conv 1', 'Pool 1', 'Conv 2', 'Pool 2', 'Conv 3', 'Conv 4', 'Conv 5', 'Pool 5', 'Avg pool', 'Classifier', 'Prediction'];
+const DIAGRAM_LAYER_KEYS = {{
+  'Conv 1': 'conv1',
+  'Pool 1': 'pool1',
+  'Conv 2': 'conv2',
+  'Pool 2': 'pool2',
+  'Conv 3': 'conv3',
+  'Conv 4': 'conv4',
+  'Conv 5': 'conv5',
+  'Pool 5': 'pool5',
+  'Avg pool': 'avgpool'
+}};
 let captions = {{}};
 let visualisationsByLabel = new Map();
-let selectedDetailLabel = null;
+let currentStage = 'Input';
+let inputState = {{kind: 'empty'}};
+let lastPredictions = [];
 let cameraStream = null;
 let cameraVideo = null;
 let liveRunActive = false;
 let liveFrameIndex = 0;
+
+function escapeHtml(value) {{
+  return String(value).replace(/[&<>"']/g, character => ({{
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }}[character]));
+}}
 
 function setStatus(text, kind = '') {{
   statusBox.className = `message ${{kind}}`;
@@ -422,103 +440,203 @@ function setStatus(text, kind = '') {{
 }}
 
 function clearResults() {{
-  predictions.innerHTML = '';
   visualisationsByLabel = new Map();
-  selectedDetailLabel = null;
-  layerDetail.className = 'layer-detail placeholder';
-  layerDetail.innerHTML = '<p class="message">Click a feature-map card after running AlexNet to enlarge that layer and read a more detailed explanation.</p>';
-  featureMaps.innerHTML = '<p class="message">Run AlexNet to show selected activation grids for early, middle, and deep convolution layers.</p>';
-  setStatus('Predictions will appear here after you run AlexNet.');
+  lastPredictions = [];
+  renderSelectedLayerDetail();
+  setStatus('Run AlexNet, then choose any layer. Predictions are shown by selecting the Prediction stage.');
 }}
 
 function resetDemo() {{
-  stopCamera();
+  stopCamera({{clearInput: true}});
   imageSelect.value = '';
+  inputState = {{kind: 'empty'}};
   fallbackToggle.checked = false;
   runButton.disabled = true;
-  preview.innerHTML = '<p class="muted">Choose a curated image to preview it here.</p>';
   clearResults();
   selectStage('Input');
 }}
 
-function selectStage(stage) {{
-  [...timeline.querySelectorAll('button')].forEach(button => button.classList.toggle('active', button.dataset.stage === stage));
-  document.querySelectorAll('.network .layer').forEach(layer => layer.classList.toggle('active', layer.dataset.layer === stage));
-  caption.textContent = captions[stage] || 'This shows how a trained vision model responds at this stage.';
+function selectStage(stage, options = {{}}) {{
+  currentStage = DIAGRAM_LAYERS.includes(stage) ? stage : 'Input';
+  document.querySelectorAll('.network .layer').forEach(layer => layer.classList.toggle('active', layer.dataset.layer === currentStage));
+  caption.textContent = captions[currentStage] || 'This shows how a trained vision model responds at this stage.';
+  if (options.render !== false) {{
+    renderSelectedLayerDetail({{scroll: options.scroll === true}});
+  }}
 }}
 
-function showLayerDetail(item, options = {{}}) {{
-  selectedDetailLabel = item.label;
-  selectStage(item.label);
-  document.querySelectorAll('.feature-card').forEach(card => card.classList.toggle('active', card.dataset.layer === item.label));
+function renderSelectedLayerDetail(options = {{}}) {{
+  if (currentStage === 'Input') {{
+    renderInputDetail(options);
+  }} else if (currentStage === 'Prediction') {{
+    renderPredictionDetail(options);
+  }} else if (currentStage === 'Classifier') {{
+    renderClassifierDetail(options);
+  }} else {{
+    const item = visualisationsByLabel.get(currentStage);
+    if (item) {{
+      renderActivationDetail(item, options);
+    }} else {{
+      renderLayerPlaceholder(currentStage, options);
+    }}
+  }}
+}}
+
+function scrollLayerDetailIfNeeded(options = {{}}) {{
+  if (options.scroll === true) {{
+    layerDetail.scrollIntoView({{behavior: 'smooth', block: 'nearest'}});
+  }}
+}}
+
+function renderInputDetail(options = {{}}) {{
+  const captionText = captions.Input || 'The image is resized and normalised before entering the network.';
+  layerDetail.className = inputState.kind === 'empty' ? 'layer-detail placeholder' : 'layer-detail';
+  if (cameraStream && cameraVideo) {{
+    layerDetail.innerHTML = `
+      <div class="input-media" aria-label="Local camera preview">
+        <video autoplay playsinline muted aria-label="Live local camera input"></video>
+      </div>
+      <div class="detail-copy">
+        <h3>Input</h3>
+        <p>${{escapeHtml(captionText)}}</p>
+        <p>This is the live local camera frame before AlexNet preprocessing. Frames are analysed in memory and are not saved.</p>
+        <span class="detail-pill">Opt-in camera</span>
+        <span class="detail-pill">Local only</span>
+        <span class="detail-pill">Not saved</span>
+      </div>`;
+    const visibleVideo = layerDetail.querySelector('.input-media video');
+    visibleVideo.srcObject = cameraStream;
+    visibleVideo.play().catch(() => {{}});
+  }} else if (inputState.kind === 'image') {{
+    layerDetail.innerHTML = `
+      <img src="${{escapeHtml(inputState.url)}}" alt="Selected curated input image" />
+      <div class="detail-copy">
+        <h3>Input</h3>
+        <p>${{escapeHtml(captionText)}}</p>
+        <p>${{escapeHtml(inputState.label || 'Selected curated image')}}</p>
+        <span class="detail-pill">Curated image</span>
+        <span class="detail-pill">224 × 224 model input after preprocessing</span>
+      </div>`;
+  }} else {{
+    layerDetail.innerHTML = '<p class="message">Choose a curated image or start the camera. The selected input will appear here as the first selectable AlexNet stage.</p>';
+  }}
+  scrollLayerDetailIfNeeded(options);
+}}
+
+function renderActivationDetail(item, options = {{}}) {{
   const captionText = captions[item.caption_key] || item.note || 'This shows fixed channels from this layer response.';
+  const tensorShape = (item.tensor_shape || []).join(' × ');
   layerDetail.className = 'layer-detail';
   layerDetail.innerHTML = `
-    <img src="${{item.image_data}}" alt="Large ${{item.label}} activation grid" />
+    <img class="activation-detail-image" data-layer="${{escapeHtml(item.label)}}" src="${{item.image_data}}" alt="Large ${{escapeHtml(item.label)}} activation grid" />
     <div class="detail-copy">
-      <h3>${{item.label}}</h3>
-      <p>${{captionText}}</p>
-      <p>${{item.note || 'Each square is one fixed channel from this layer, so the tile position stays stable across frames. Cyan, yellow, and white regions indicate stronger responses after normalising that channel for display.'}}</p>
-      <span class="detail-pill">${{item.tensor_shape.join(' × ')}}</span>
+      <h3>${{escapeHtml(item.label)}}</h3>
+      <p>${{escapeHtml(captionText)}}</p>
+      <p>${{escapeHtml(item.note || 'Each square is one fixed channel from this layer, so the tile position stays stable across frames. Cyan, yellow, and white regions indicate stronger responses after normalising that channel for display.')}}</p>
+      <span class="detail-pill">${{escapeHtml(tensorShape)}}</span>
       <span class="detail-pill">Fixed channel positions</span>
       <span class="detail-pill">Cyan/yellow/white = stronger</span>
       <span class="detail-pill">Normalised for display</span>
       <span class="detail-pill">Updates with each live frame</span>
     </div>`;
-  if (options.scroll !== false) {{
-    layerDetail.scrollIntoView({{behavior: 'smooth', block: 'nearest'}});
+  scrollLayerDetailIfNeeded(options);
+}}
+
+function renderLayerPlaceholder(stage, options = {{}}) {{
+  const captionText = captions[stage] || 'This shows how a trained vision model responds at this stage.';
+  layerDetail.className = 'layer-detail placeholder';
+  layerDetail.innerHTML = `<p class="message"><strong>${{escapeHtml(stage)}}:</strong> ${{escapeHtml(captionText)}} Run AlexNet to show this layer from the selected input.</p>`;
+  scrollLayerDetailIfNeeded(options);
+}}
+
+function renderClassifierDetail(options = {{}}) {{
+  const captionText = captions.Classifier || 'The classifier turns compact feature values into scores for ImageNet training labels.';
+  const avgPool = visualisationsByLabel.get('Avg pool');
+  const shape = avgPool ? avgPool.tensor_shape.join(' × ') : 'Run AlexNet to show incoming feature shape';
+  layerDetail.className = 'layer-detail placeholder';
+  layerDetail.innerHTML = `
+    <div class="detail-copy">
+      <h3>Classifier</h3>
+      <p>${{escapeHtml(captionText)}}</p>
+      <p>AlexNet flattens the compact feature maps and uses fully connected layers to produce class scores. This demo shows those scores through the prediction list rather than claiming the model is certain.</p>
+      <span class="detail-pill">Input: ${{escapeHtml(shape)}}</span>
+      <span class="detail-pill">Fully connected layers</span>
+      <span class="detail-pill">Scores, not certainty</span>
+    </div>`;
+  scrollLayerDetailIfNeeded(options);
+}}
+
+function predictionListHtml() {{
+  if (!lastPredictions.length) {{
+    return '<p class="message">Run AlexNet to show the top likely ImageNet labels for this input.</p>';
+  }}
+  const items = lastPredictions.map(item => {{
+    const pct = Math.round(item.probability * 1000) / 10;
+    return `<li><strong>${{escapeHtml(item.label)}}</strong><span>${{pct}}%</span><div class="bar"><span style="width: ${{pct}}%"></span></div></li>`;
+  }}).join('');
+  return `<ol class="prediction-detail">${{items}}</ol>`;
+}}
+
+function renderPredictionDetail(options = {{}}) {{
+  const captionText = captions.Prediction || 'The final prediction is a likely class from the model’s training labels. It can be wrong.';
+  layerDetail.className = lastPredictions.length ? 'layer-detail' : 'layer-detail placeholder';
+  layerDetail.innerHTML = `
+    <div data-role="prediction-list">
+      ${{predictionListHtml()}}
+    </div>
+    <div class="detail-copy">
+      <h3>Prediction</h3>
+      <p>${{escapeHtml(captionText)}}</p>
+      <p>These labels come from the model’s training categories and can be wrong, especially for unusual, ambiguous, or out-of-distribution images.</p>
+      <span class="detail-pill">Top-5 labels</span>
+      <span class="detail-pill">Likely, not guaranteed</span>
+    </div>`;
+  scrollLayerDetailIfNeeded(options);
+}}
+
+function updateLiveLayerDetail() {{
+  if (currentStage === 'Input' || currentStage === 'Classifier') {{
+    return;
+  }}
+  if (currentStage === 'Prediction') {{
+    const predictionList = layerDetail.querySelector('[data-role="prediction-list"]');
+    if (predictionList) {{
+      predictionList.innerHTML = predictionListHtml();
+    }} else {{
+      renderPredictionDetail({{scroll: false}});
+    }}
+    return;
+  }}
+
+  const item = visualisationsByLabel.get(currentStage);
+  if (!item) {{
+    return;
+  }}
+  const image = layerDetail.querySelector('.activation-detail-image');
+  if (image && image.dataset.layer === currentStage) {{
+    image.src = item.image_data;
+  }} else {{
+    renderActivationDetail(item, {{scroll: false}});
   }}
 }}
 
-function selectLayerFromDiagram(stage) {{
-  selectStage(stage);
-  const item = visualisationsByLabel.get(stage);
-  if (item) {{
-    showLayerDetail(item);
-  }}
-}}
-
-function renderAnalysisResult(data) {{
+function renderAnalysisResult(data, options = {{}}) {{
   setStatus(data.message || 'Run complete.', data.ok ? 'ok' : 'error');
   if (data.help) {{
     setStatus(`${{data.message}} ${{data.help}}`, data.ok ? 'ok' : 'error');
   }}
-  predictions.innerHTML = '';
-  visualisationsByLabel = new Map();
-  data.predictions.forEach(item => {{
-    const li = document.createElement('li');
-    const pct = Math.round(item.probability * 1000) / 10;
-    li.innerHTML = `<strong>${{item.label}}</strong><span>${{pct}}%</span><div class="bar"><span style="width: ${{pct}}%"></span></div>`;
-    predictions.appendChild(li);
-  }});
+  lastPredictions = data.predictions || [];
+  if (options.live !== true) {{
+    visualisationsByLabel = new Map();
+  }}
   const visualisationsIncluded = data.visualisations_included !== false;
-  if (visualisationsIncluded) {{
-    featureMaps.innerHTML = '';
-    if (data.visualisations && data.visualisations.length) {{
-      data.visualisations.forEach(item => {{
-        visualisationsByLabel.set(item.label, item);
-        const card = document.createElement('article');
-        card.className = 'feature-card';
-        card.dataset.layer = item.label;
-        const captionText = captions[item.caption_key] || item.note || '';
-        card.innerHTML = `<h3>${{item.label}}</h3><img src="${{item.image_data}}" alt="${{item.label}} activation grid" /><small>${{captionText}}</small><small>Tensor shape: ${{item.tensor_shape.join(' × ')}}</small><small>Click to enlarge this layer.</small>`;
-        card.addEventListener('click', () => showLayerDetail(item));
-        featureMaps.appendChild(card);
-      }});
-      const detailLabel = selectedDetailLabel || data.visualisations[0].label;
-      const detailItem = visualisationsByLabel.get(detailLabel);
-      if (detailItem) {{
-        showLayerDetail(detailItem, {{scroll: false}});
-      }}
-    }} else if (data.ok) {{
-      layerDetail.className = 'layer-detail placeholder';
-      layerDetail.innerHTML = '<p class="message">Click a feature-map card after running AlexNet to enlarge that layer and read a more detailed explanation.</p>';
-      featureMaps.innerHTML = '<p class="message">The model ran, but no selected activation grids were captured.</p>';
-    }} else {{
-      layerDetail.className = 'layer-detail placeholder';
-      layerDetail.innerHTML = '<p class="message">Detailed layer views will appear when live inference or fallback replay is available.</p>';
-      featureMaps.innerHTML = '<p class="message">Activation grids will appear here when live inference or fallback replay is available.</p>';
-    }}
+  if (visualisationsIncluded && data.visualisations) {{
+    data.visualisations.forEach(item => visualisationsByLabel.set(item.label, item));
+  }}
+  if (options.live === true) {{
+    updateLiveLayerDetail();
+  }} else {{
+    renderSelectedLayerDetail();
   }}
 }}
 
@@ -528,22 +646,33 @@ function stopLiveRun() {{
   liveRunButton.classList.remove('secondary');
 }}
 
-function stopCamera() {{
+function stopCamera(options = {{}}) {{
   stopLiveRun();
   if (cameraStream) {{
     cameraStream.getTracks().forEach(track => track.stop());
+  }}
+  if (cameraVideo) {{
+    cameraVideo.srcObject = null;
+    cameraVideo.remove();
   }}
   cameraStream = null;
   cameraVideo = null;
   cameraRunButton.disabled = true;
   liveRunButton.disabled = true;
   startCameraButton.textContent = 'Start camera';
+  if (options.clearInput === true) {{
+    inputState = {{kind: 'empty'}};
+  }}
+  if (currentStage === 'Input') {{
+    renderSelectedLayerDetail();
+  }}
 }}
 
 async function startCamera() {{
   if (cameraStream) {{
-    stopCamera();
-    preview.innerHTML = '<p class="muted">Choose a curated image or start the camera preview.</p>';
+    stopCamera({{clearInput: true}});
+    clearResults();
+    selectStage('Input');
     return;
   }}
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
@@ -552,6 +681,7 @@ async function startCamera() {{
   }}
   clearResults();
   imageSelect.value = '';
+  inputState = {{kind: 'empty'}};
   runButton.disabled = true;
   try {{
     cameraStream = await navigator.mediaDevices.getUserMedia({{video: {{width: {{ideal: 960}}, height: {{ideal: 720}}, facingMode: 'user'}}, audio: false}});
@@ -559,17 +689,51 @@ async function startCamera() {{
     cameraVideo.autoplay = true;
     cameraVideo.playsInline = true;
     cameraVideo.muted = true;
+    cameraVideo.className = 'camera-capture-source';
+    cameraVideo.setAttribute('aria-hidden', 'true');
+    cameraVideo.tabIndex = -1;
     cameraVideo.srcObject = cameraStream;
-    preview.innerHTML = '';
-    preview.appendChild(cameraVideo);
+    document.body.appendChild(cameraVideo);
+    inputState = {{kind: 'camera'}};
+    selectStage('Input');
+    await waitForCameraReady();
     cameraRunButton.disabled = false;
     liveRunButton.disabled = false;
     startCameraButton.textContent = 'Stop camera';
     setStatus('Camera preview is local. Capture one frame or start continuous AlexNet.', 'ok');
   }} catch (error) {{
     setStatus(`Camera access was not available: ${{error}}`, 'error');
-    stopCamera();
+    stopCamera({{clearInput: true}});
   }}
+}}
+
+function waitForCameraReady() {{
+  return new Promise((resolve, reject) => {{
+    if (!cameraVideo) {{
+      reject(new Error('Camera preview was not created.'));
+      return;
+    }}
+    const done = () => {{
+      cleanup();
+      resolve();
+    }};
+    const fail = () => {{
+      cleanup();
+      reject(new Error('Camera preview did not become ready in time.'));
+    }};
+    const cleanup = () => {{
+      window.clearTimeout(timeout);
+      cameraVideo.removeEventListener('loadedmetadata', done);
+      cameraVideo.removeEventListener('canplay', done);
+    }};
+    const timeout = window.setTimeout(fail, 4000);
+    cameraVideo.addEventListener('loadedmetadata', done, {{once: true}});
+    cameraVideo.addEventListener('canplay', done, {{once: true}});
+    cameraVideo.play().catch(() => {{}});
+    if (cameraVideo.videoWidth && cameraVideo.videoHeight) {{
+      done();
+    }}
+  }});
 }}
 
 function captureCameraFrame() {{
@@ -588,26 +752,31 @@ function captureCameraFrame() {{
   return canvas.toDataURL('image/jpeg', 0.9);
 }}
 
-async function analyseCameraFrame({{includeVisualisations = true, live = false}} = {{}}) {{
+async function analyseCameraFrame({{includeVisualisations = true, live = false, visualisationKeys = []}} = {{}}) {{
   const imageData = captureCameraFrame();
   const response = await fetch('/api/run-camera', {{
     method: 'POST',
     headers: {{'Content-Type': 'application/json'}},
-    body: JSON.stringify({{image_data: imageData, fallback: fallbackToggle.checked, include_visualisations: includeVisualisations}})
+    body: JSON.stringify({{
+      image_data: imageData,
+      fallback: fallbackToggle.checked,
+      include_visualisations: includeVisualisations,
+      visualisation_keys: visualisationKeys
+    }})
   }});
   const data = await response.json();
-  renderAnalysisResult(data);
+  renderAnalysisResult(data, {{live}});
   if (live && data.ok) {{
-    setStatus(`Continuous AlexNet is running locally. Analysed frame ${{liveFrameIndex}}.`, 'ok');
+    if (liveFrameIndex === 1 || liveFrameIndex % 5 === 0) {{
+      setStatus(`Continuous AlexNet is running locally. Analysed frame ${{liveFrameIndex}}.`, 'ok');
+    }}
   }}
   return data;
 }}
 
 async function runCameraFrame() {{
   cameraRunButton.disabled = true;
-  predictions.innerHTML = '';
-  featureMaps.innerHTML = '<p class="message">Capturing selected AlexNet layer responses from the camera frame…</p>';
-  setStatus('Capturing one local camera frame…');
+  setStatus('Capturing one local camera frame and selected AlexNet layers…');
   try {{
     await analyseCameraFrame({{includeVisualisations: true, live: false}});
   }} catch (error) {{
@@ -620,8 +789,13 @@ async function runCameraFrame() {{
 async function liveRunLoop() {{
   if (!liveRunActive || !cameraStream) return;
   liveFrameIndex += 1;
+  const selectedVisualisationKey = DIAGRAM_LAYER_KEYS[currentStage];
   try {{
-    await analyseCameraFrame({{includeVisualisations: true, live: true}});
+    await analyseCameraFrame({{
+      includeVisualisations: Boolean(selectedVisualisationKey),
+      live: true,
+      visualisationKeys: selectedVisualisationKey ? [selectedVisualisationKey] : []
+    }});
   }} catch (error) {{
     setStatus(`Continuous AlexNet stopped: ${{error}}`, 'error');
     stopLiveRun();
@@ -646,23 +820,12 @@ function toggleLiveRun() {{
   liveFrameIndex = 0;
   liveRunButton.textContent = 'Stop continuous AlexNet';
   liveRunButton.classList.add('secondary');
-  predictions.innerHTML = '';
-  featureMaps.innerHTML = '<p class="message">Continuous AlexNet is analysing camera frames locally and refreshing feature maps each frame…</p>';
-  setStatus('Continuous AlexNet is starting. Predictions and detailed feature maps update on each analysed frame.', 'ok');
+  setStatus('Continuous AlexNet is starting. Predictions and the selected diagram layer update on each analysed frame.', 'ok');
   liveRunLoop();
 }}
 
 async function loadCaptions() {{
   captions = await fetch('/api/captions').then(response => response.json());
-  timeline.innerHTML = '';
-  Object.keys(captions).forEach(stage => {{
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = stage;
-    button.dataset.stage = stage;
-    button.addEventListener('click', () => selectStage(stage));
-    timeline.appendChild(button);
-  }});
   selectStage('Input');
 }}
 
@@ -688,23 +851,24 @@ async function loadImages() {{
 }}
 
 imageSelect.addEventListener('change', () => {{
-  stopCamera();
+  stopCamera({{clearInput: false}});
   clearResults();
   const selected = imageSelect.selectedOptions[0];
   runButton.disabled = !imageSelect.value;
   if (!imageSelect.value) {{
-    preview.innerHTML = '<p class="muted">Choose a curated image to preview it here.</p>';
+    inputState = {{kind: 'empty'}};
+    selectStage('Input');
     return;
   }}
-  preview.innerHTML = `<img src="${{selected.dataset.url}}" alt="Selected curated image" />`;
+  inputState = {{kind: 'image', url: selected.dataset.url, label: selected.textContent}};
+  selectStage('Input');
+  setStatus('Input image ready. Run AlexNet, then use the diagram to inspect every layer.', 'ok');
 }});
 
 runButton.addEventListener('click', async () => {{
   if (!imageSelect.value) return;
   runButton.disabled = true;
-  predictions.innerHTML = '';
-  featureMaps.innerHTML = '<p class="message">Capturing selected AlexNet layer responses…</p>';
-  setStatus('Running AlexNet locally…');
+  setStatus('Running AlexNet locally and capturing selectable layer responses…');
   try {{
     const response = await fetch('/api/run', {{
       method: 'POST',
@@ -726,7 +890,13 @@ liveRunButton.addEventListener('click', toggleLiveRun);
 resetButton.addEventListener('click', resetDemo);
 document.querySelectorAll('.network .layer').forEach(layer => {{
   layer.style.cursor = 'pointer';
-  layer.addEventListener('click', () => selectLayerFromDiagram(layer.dataset.layer));
+  layer.addEventListener('click', () => selectStage(layer.dataset.layer, {{scroll: true}}));
+  layer.addEventListener('keydown', event => {{
+    if (event.key === 'Enter' || event.key === ' ') {{
+      event.preventDefault();
+      selectStage(layer.dataset.layer, {{scroll: true}});
+    }}
+  }});
 }});
 
 loadCaptions();

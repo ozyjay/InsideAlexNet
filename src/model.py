@@ -106,21 +106,31 @@ def run_alexnet_analysis(
     *,
     top_k: int = 5,
     include_visualisations: bool = True,
+    visualisation_keys: set[str] | None = None,
 ) -> AlexNetAnalysis:
     """Run AlexNet once and return predictions plus selected activation grids."""
     bundle = load_alexnet()
     input_tensor = preprocess_for_alexnet(image)
+    selected_specs = tuple(
+        spec for spec in SELECTED_LAYER_SPECS if visualisation_keys is None or spec.key in visualisation_keys
+    )
 
-    with torch.inference_mode(), ActivationCapture(bundle.model) as capture:
-        logits = bundle.model(input_tensor)
+    capture: ActivationCapture | None = None
+    if include_visualisations and selected_specs:
+        with torch.inference_mode(), ActivationCapture(bundle.model, specs=selected_specs) as active_capture:
+            logits = bundle.model(input_tensor)
+            capture = active_capture
+    else:
+        with torch.inference_mode():
+            logits = bundle.model(input_tensor)
 
     probabilities = torch.nn.functional.softmax(logits[0], dim=0)
     top_probabilities, top_indices = torch.topk(probabilities, k=top_k)
     predictions = _format_predictions(bundle.categories, top_probabilities, top_indices)
 
     visualisations: list[ActivationVisualisation] = []
-    if include_visualisations:
-        for spec in SELECTED_LAYER_SPECS:
+    if include_visualisations and capture is not None:
+        for spec in selected_specs:
             activation = capture.activations.get(spec.key)
             if activation is None:
                 continue

@@ -4,9 +4,16 @@ from __future__ import annotations
 
 CAPTIONS: dict[str, str] = {
     "Input": "The image is resized and normalised before entering the network.",
-    "Early layer": "Early layers often respond to simple patterns such as edges, colour changes, and corners.",
-    "Middle layer": "Middle layers combine simpler patterns into textures, curves, and repeated shapes.",
-    "Deep layer": "Deeper layers respond to combinations of features that may be useful for recognising objects.",
+    "Conv 1": "The first convolution often responds to simple patterns such as edges, colour changes, and corners.",
+    "Pool 1": "The first pooling layer keeps strong nearby responses while reducing the spatial size.",
+    "Conv 2": "The second convolution combines simple patterns into richer local features.",
+    "Pool 2": "The second pooling layer keeps strong responses and makes the feature maps smaller again.",
+    "Conv 3": "The third convolution combines earlier patterns into textures, curves, and repeated shapes.",
+    "Conv 4": "The fourth convolution builds more specialised combinations of visual features.",
+    "Conv 5": "The fifth convolution produces deeper feature maps that feed the final classifier pathway.",
+    "Pool 5": "The final pooling layer compresses the deepest feature maps into a compact spatial summary.",
+    "Avg pool": "Adaptive average pooling shapes the final feature maps into the fixed size expected by the classifier.",
+    "Classifier": "The classifier turns the compact feature values into scores for ImageNet training labels.",
     "Prediction": "The final prediction is a likely class from the model’s training labels. It can be wrong.",
 }
 
