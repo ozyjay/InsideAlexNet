@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for future development of **How Does a Neural Network See?**
+Guidance for future development of **InsideNeuralNets**
 
 ## Working rules
 

@@ -13,7 +13,7 @@ $VenvUvicorn = Join-Path $VenvDir "bin/uvicorn"
 
 Set-Location $ProjectRoot
 
-Write-Host "Setting up How Does a Neural Network See?"
+Write-Host "Setting up InsideNeuralNets"
 Write-Host "Project: $ProjectRoot"
 Write-Host "Virtual environment: $VenvDir"
 

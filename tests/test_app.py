@@ -7,7 +7,7 @@ from app import RunRequest
 def test_index_html_mentions_fastapi_demo_title() -> None:
     html = demo_app.index()
 
-    assert "How Does a Neural Network See?" in html
+    assert "InsideNeuralNets" in html
     assert "trained vision model" in html
 
 

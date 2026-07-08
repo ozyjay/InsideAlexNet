@@ -1,4 +1,4 @@
-# How Does a Neural Network See?
+# InsideNeuralNets
 
 A local-first Open Day demo that uses AlexNet and newer CNNs to explain how trained vision models respond at different layers.
 
@@ -153,7 +153,7 @@ pwsh -NoProfile -File scripts/stop_dev.ps1
 The FastAPI app reads these defaults from `.env` when using the run scripts. `.env.example` documents them:
 
 ```env
-DEMO_NAME=alexnet-vision-demo
+DEMO_NAME=inside-neural-nets
 FRONTEND_HOST=127.0.0.1
 FRONTEND_PORT=3450
 ```

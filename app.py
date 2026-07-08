@@ -24,7 +24,7 @@ from src.visualise import (
     normalise_activation_colour_map,
 )
 
-APP_TITLE = "How Does a Neural Network See?"
+APP_TITLE = "InsideNeuralNets"
 THEME_OPTIONS = (
     ("aurora", "Aurora booth"),
     ("laboratory", "Laboratory microscope"),
