@@ -542,7 +542,7 @@ def _render_index_html() -> str:
     <section class="stack">
       <div class="card">
         <h2>Model layer explorer</h2>
-        <div id="status" class="message">Run a model, then choose any layer. Predictions are shown by selecting the Prediction stage.</div>
+        <div id="status" class="message" hidden></div>
         <p id="caption" class="message">Choose any layer in the diagram, including the input.</p>
         <div id="networkDiagram" class="network" aria-label="Selectable model layer diagram"></div>
         <div id="layerDetail" class="layer-detail placeholder">
@@ -594,8 +594,15 @@ function escapeHtml(value) {{
 }}
 
 function setStatus(text, kind = '') {{
+  statusBox.hidden = false;
   statusBox.className = `message ${{kind}}`;
   statusBox.textContent = text;
+}}
+
+function clearStatus() {{
+  statusBox.hidden = true;
+  statusBox.className = 'message';
+  statusBox.textContent = '';
 }}
 
 function selectedModel() {{
@@ -791,7 +798,7 @@ function clearResults() {{
   visualisationsByLabel = new Map();
   lastPredictions = [];
   renderSelectedLayerDetail();
-  setStatus('Run a model, then choose any layer. Predictions are shown by selecting the Prediction stage.');
+  clearStatus();
 }}
 
 function isKnownTheme(theme) {{

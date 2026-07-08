@@ -35,7 +35,7 @@ def test_index_html_uses_selectable_diagram_for_model_layers() -> None:
     assert "Layer timeline" not in html
     assert "Top-5 predictions" not in html
     assert 'id="predictions"' not in html
-    assert "Predictions are shown by selecting the Prediction stage" in html
+    assert 'id="status" class="message" hidden' in html
 
 
 def test_index_html_includes_classifier_visual_sketch() -> None:
