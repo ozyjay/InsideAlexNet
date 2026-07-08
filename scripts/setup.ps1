@@ -9,7 +9,6 @@ $ScriptDir = Split-Path -Parent $PSCommandPath
 $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..")
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $VenvPython = Join-Path $VenvDir "bin/python"
-$VenvUvicorn = Join-Path $VenvDir "bin/uvicorn"
 
 Set-Location $ProjectRoot
 
@@ -75,4 +74,4 @@ Write-Host "Run the demo with:"
 Write-Host "  pwsh -NoProfile -File scripts/run_dev.ps1"
 Write-Host ""
 Write-Host "Or explicitly:"
-Write-Host "  $VenvUvicorn app:app --host 127.0.0.1 --port 3450 --log-level warning --no-access-log"
+Write-Host "  $VenvPython -m uvicorn app:app --host 127.0.0.1 --port 3450 --log-level warning --no-access-log"

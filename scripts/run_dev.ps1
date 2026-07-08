@@ -39,12 +39,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "Previous-process cleanup failed."
 }
 
-$VenvUvicorn = Join-Path $ProjectRoot ".venv/bin/uvicorn"
-if (Test-Path -Path $VenvUvicorn -PathType Leaf) {
-    $UvicornBin = $VenvUvicorn
-} else {
-    $UvicornBin = "uvicorn"
-}
-
-& $UvicornBin app:app --host $HostName --port $Port --log-level warning --no-access-log
+& $PythonBin -m uvicorn app:app --host $HostName --port $Port --log-level warning --no-access-log
 exit $LASTEXITCODE
