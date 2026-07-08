@@ -1,0 +1,103 @@
+"""Feature-map visualisation helpers for AlexNet activations."""
+
+from __future__ import annotations
+
+import base64
+from io import BytesIO
+from math import ceil
+
+import numpy as np
+from PIL import Image
+import torch
+
+
+def normalise_layer_name(layer_name: str) -> str:
+    """Return a display-safe layer name."""
+    return layer_name.strip()
+
+
+def activation_grid_png_base64(
+    activation: torch.Tensor,
+    *,
+    max_channels: int = 64,
+    columns: int = 8,
+    tile_size: int = 56,
+    gap: int = 4,
+) -> str:
+    """Render selected activation channels as a vivid feature-map grid.
+
+    Each channel is normalised independently so visitors can see spatial
+    response patterns. The result is a PNG data URI suitable for a local web UI.
+    """
+    if activation.ndim != 4:
+        raise ValueError("Expected activation tensor with shape (batch, channels, height, width).")
+
+    maps = activation[0].float()
+    if maps.numel() == 0:
+        raise ValueError("Activation tensor is empty.")
+
+    selected = _select_informative_channels(maps, max_channels=max_channels)
+    channel_count = selected.shape[0]
+    rows = ceil(channel_count / columns)
+    grid_width = columns * tile_size + (columns + 1) * gap
+    grid_height = rows * tile_size + (rows + 1) * gap
+    grid = Image.new("RGB", (grid_width, grid_height), color=(3, 4, 18))
+
+    for idx, feature_map in enumerate(selected):
+        row, col = divmod(idx, columns)
+        tile = _render_feature_tile(feature_map.numpy(), tile_size=tile_size)
+        x = gap + col * (tile_size + gap)
+        y = gap + row * (tile_size + gap)
+        grid.paste(tile, (x, y))
+
+    buffer = BytesIO()
+    grid.save(buffer, format="PNG", optimize=True)
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _select_informative_channels(maps: torch.Tensor, *, max_channels: int) -> torch.Tensor:
+    """Pick channels with the strongest average absolute response."""
+    channel_count = maps.shape[0]
+    keep = min(max_channels, channel_count)
+    scores = maps.abs().flatten(1).mean(dim=1)
+    indices = torch.topk(scores, k=keep).indices
+    return maps[indices]
+
+
+def _render_feature_tile(feature_map: np.ndarray, *, tile_size: int) -> Image.Image:
+    """Convert one feature map to a viridis-coloured tile."""
+    feature_map = feature_map.astype(np.float32)
+    low = float(np.percentile(feature_map, 2))
+    high = float(np.percentile(feature_map, 99))
+    if high > low:
+        normalised = np.clip((feature_map - low) / (high - low), 0.0, 1.0)
+    else:
+        normalised = np.zeros_like(feature_map, dtype=np.float32)
+
+    coloured = _purple_viridis(normalised)
+    tile = Image.fromarray(coloured, mode="RGB")
+    return tile.resize((tile_size, tile_size), resample=Image.Resampling.BILINEAR)
+
+
+def _purple_viridis(values: np.ndarray) -> np.ndarray:
+    """Apply a high-contrast booth-friendly colour map without pyplot state."""
+    # Dark blue/purple low responses, then cyan and warm yellow high responses.
+    anchors = np.array(
+        [
+            [8, 5, 38],
+            [52, 16, 105],
+            [126, 34, 206],
+            [14, 165, 233],
+            [34, 211, 238],
+            [250, 204, 21],
+        ],
+        dtype=np.float32,
+    )
+    values = np.clip(values, 0.0, 1.0) ** 0.78
+    scaled = values * (len(anchors) - 1)
+    lower = np.floor(scaled).astype(np.int32)
+    upper = np.clip(lower + 1, 0, len(anchors) - 1)
+    blend = (scaled - lower)[..., None]
+    rgb = anchors[lower] * (1.0 - blend) + anchors[upper] * blend
+    return np.clip(rgb, 0, 255).astype(np.uint8)
