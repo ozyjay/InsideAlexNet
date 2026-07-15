@@ -44,6 +44,9 @@ def test_index_html_includes_classifier_visual_sketch() -> None:
     assert "Classifier layer visual sketch" in html
     assert "classifier-flow" in html
     assert "Top classifier score bars" in html
+    assert "const CLASSIFIER_LABEL_COUNT = 20;" in html
+    assert "lastPredictions.slice(0, CLASSIFIER_LABEL_COUNT)" in html
+    assert "lastPredictions.slice(0, PREDICTION_LABEL_COUNT)" in html
     assert "Scores, not certainty" in html
 
 
@@ -172,8 +175,10 @@ def test_live_response_passes_selected_visualisation_keys(monkeypatch) -> None:
         visualisation_keys=None,
         activation_colour_map="aurora",
         model_key="alexnet",
+        top_k=5,
     ):
         captured["model_key"] = model_key
+        captured["top_k"] = top_k
         captured["include_visualisations"] = include_visualisations
         captured["visualisation_keys"] = visualisation_keys
         captured["activation_colour_map"] = activation_colour_map
@@ -194,6 +199,7 @@ def test_live_response_passes_selected_visualisation_keys(monkeypatch) -> None:
     assert response.status_code == 200
     assert captured == {
         "model_key": "resnet50",
+        "top_k": 20,
         "include_visualisations": True,
         "visualisation_keys": {"conv1"},
         "activation_colour_map": "calm",

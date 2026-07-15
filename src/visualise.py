@@ -113,15 +113,26 @@ def activation_grid_png_base64(
         raise ValueError("Activation tensor is empty.")
 
     selected = select_fixed_channels(maps, max_channels=max_channels)
+    compact_channel_summary = _is_compact_channel_summary(selected)
+    display_maps = (
+        _normalise_compact_channel_summary(selected)
+        if compact_channel_summary
+        else selected
+    )
     channel_count = selected.shape[0]
     rows = ceil(channel_count / columns)
     grid_width = columns * tile_size + (columns + 1) * gap
     grid_height = rows * tile_size + (rows + 1) * gap
     grid = Image.new("RGB", (grid_width, grid_height), color=(4, 6, 22))
 
-    for idx, feature_map in enumerate(selected):
+    for idx, feature_map in enumerate(display_maps):
         row, col = divmod(idx, columns)
-        tile = _render_feature_tile(feature_map.numpy(), tile_size=tile_size, colour_map=colour_map)
+        tile = _render_feature_tile(
+            feature_map.numpy(),
+            tile_size=tile_size,
+            colour_map=colour_map,
+            already_normalised=compact_channel_summary,
+        )
         x = gap + col * (tile_size + gap)
         y = gap + row * (tile_size + gap)
         grid.paste(tile, (x, y))
@@ -160,20 +171,49 @@ def normalise_activation_colour_map(colour_map: str | None) -> str:
     return DEFAULT_ACTIVATION_COLOUR_MAP
 
 
+def _is_compact_channel_summary(maps: torch.Tensor) -> bool:
+    """Return whether maps are one value per channel, as in avg-pool output."""
+    return maps.ndim == 3 and maps.shape[1:] == (1, 1)
+
+
+def _normalise_compact_channel_summary(maps: torch.Tensor) -> torch.Tensor:
+    """Normalise one-value-per-channel summaries across channels.
+
+    Average-pool layers often have shape ``channels × 1 × 1``. If each tile is
+    normalised independently, every tile has a single constant value and renders
+    as the darkest colour. Normalising across selected channels instead makes
+    the compact channel summary visible while keeping fixed tile positions.
+    """
+    values = maps.float().numpy()
+    low = float(np.percentile(values, 1))
+    high = float(np.percentile(values, 99.7))
+    if high > low:
+        normalised = np.clip((values - low) / (high - low), 0.0, 1.0)
+    elif np.any(values != 0.0):
+        normalised = np.full_like(values, 0.5, dtype=np.float32)
+    else:
+        normalised = np.zeros_like(values, dtype=np.float32)
+    return torch.from_numpy(normalised.astype(np.float32))
+
+
 def _render_feature_tile(
     feature_map: np.ndarray,
     *,
     tile_size: int,
     colour_map: str = DEFAULT_ACTIVATION_COLOUR_MAP,
+    already_normalised: bool = False,
 ) -> Image.Image:
     """Convert one feature map to a vivid coloured tile."""
     feature_map = feature_map.astype(np.float32)
-    low = float(np.percentile(feature_map, 1))
-    high = float(np.percentile(feature_map, 99.7))
-    if high > low:
-        normalised = np.clip((feature_map - low) / (high - low), 0.0, 1.0)
+    if already_normalised:
+        normalised = np.clip(feature_map, 0.0, 1.0)
     else:
-        normalised = np.zeros_like(feature_map, dtype=np.float32)
+        low = float(np.percentile(feature_map, 1))
+        high = float(np.percentile(feature_map, 99.7))
+        if high > low:
+            normalised = np.clip((feature_map - low) / (high - low), 0.0, 1.0)
+        else:
+            normalised = np.zeros_like(feature_map, dtype=np.float32)
 
     coloured = apply_activation_colour_map(normalised, colour_map=colour_map)
     tile = Image.fromarray(coloured, mode="RGB")
