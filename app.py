@@ -548,7 +548,6 @@ def _render_index_html() -> str:
       <div class="card">
         <h2>Model layer explorer</h2>
         <div id="status" class="message" hidden></div>
-        <p id="caption" class="message">Choose any layer in the diagram, including the input.</p>
         <div id="networkDiagram" class="network" aria-label="Selectable model layer diagram"></div>
         <div id="layerDetail" class="layer-detail placeholder">
           <p class="message">Choose a curated image or start the camera, then select any model layer in the diagram.</p>
@@ -576,7 +575,6 @@ const activationColourSelect = document.getElementById('activationColourSelect')
 const themeSelect = document.getElementById('themeSelect');
 const statusBox = document.getElementById('status');
 const layerDetail = document.getElementById('layerDetail');
-const caption = document.getElementById('caption');
 const networkDiagram = document.getElementById('networkDiagram');
 const ACTIVATION_COLOUR_STORAGE_KEY = 'insideAlexNetActivationColourMap';
 const THEME_STORAGE_KEY = 'insideAlexNetColourTheme';
@@ -601,6 +599,10 @@ function escapeHtml(value) {{
 }}
 
 function setStatus(text, kind = '') {{
+  if (kind !== 'error') {{
+    clearStatus();
+    return;
+  }}
   statusBox.hidden = false;
   statusBox.className = `message ${{kind}}`;
   statusBox.textContent = text;
@@ -874,18 +876,9 @@ function resetDemo() {{
 function selectStage(stage, options = {{}}) {{
   currentStage = diagramStageLabels().includes(stage) ? stage : 'Input';
   document.querySelectorAll('.network .layer').forEach(layer => layer.classList.toggle('active', layer.dataset.layer === currentStage));
-  caption.textContent = stageCaption(currentStage);
   if (options.render !== false) {{
     renderSelectedLayerDetail({{scroll: options.scroll === true}});
   }}
-}}
-
-function stageCaption(stage) {{
-  const modelLayer = selectedModelLayer(stage);
-  if (modelLayer) {{
-    return captions[modelLayer.caption_key] || modelLayer.note || 'This shows how a trained vision model responds at this stage.';
-  }}
-  return captions[stage] || 'This shows how a trained vision model responds at this stage.';
 }}
 
 function renderSelectedLayerDetail(options = {{}}) {{
